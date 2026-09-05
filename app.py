@@ -202,6 +202,8 @@ class CedarHandler(BaseHTTPRequestHandler):
             return self.bookkeeping_export()
         if path == "/api/analytics/export.csv":
             return self.analytics_export()
+        if path == "/admin":
+            return self.redirect("/ops")
         if path == "/ops":
             return self.redirect("/ops/orders")
         if path == "/ops/orders":
