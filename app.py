@@ -18,6 +18,22 @@ from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 
 from cedarhq.config import BASE_DIR, config
 from cedarhq.db import migrate, transaction, utcnow
+from cedarhq.expansion import (
+    choose_mail_address,
+    connect_sales_tax_sandbox,
+    mailroom_context,
+    ops_mailroom_context,
+    ops_process_mail_action,
+    partner_application_action,
+    partners_context,
+    registered_agent_context,
+    request_mail_action,
+    rewards_context,
+    sales_tax_action,
+    sales_tax_context,
+    save_discovery_profile,
+    start_foreign_qualification,
+)
 from cedarhq.security import hash_token, random_token, sign_value, unsign_value, validate_password_strength
 from cedarhq.services import (
     OPS_ROLES,
@@ -186,6 +202,18 @@ class CedarHandler(BaseHTTPRequestHandler):
             return self.documents_page()
         if path == "/app/compliance":
             return self.compliance_page()
+        if path == "/app/registered-agent":
+            return self.registered_agent_page()
+        if path == "/app/mailroom":
+            return self.mailroom_page()
+        if path == "/app/partners":
+            return self.partners_page()
+        if path == "/app/equity":
+            return self.equity_page()
+        if path == "/app/rewards":
+            return self.rewards_page()
+        if path == "/app/sales-tax":
+            return self.sales_tax_page()
         if path == "/app/billing":
             return self.billing_page()
         if path == "/app/support":
@@ -210,6 +238,8 @@ class CedarHandler(BaseHTTPRequestHandler):
             return self.ops_orders_page()
         if path == "/ops/compliance":
             return self.ops_compliance_page()
+        if path == "/ops/mailroom":
+            return self.ops_mailroom_page()
         if path == "/ops/audit":
             return self.ops_audit_page()
         if path == "/ops/taxes":
@@ -250,6 +280,23 @@ class CedarHandler(BaseHTTPRequestHandler):
             return self.checkout_post()
         if path == "/app/support":
             return self.support_post()
+        if path == "/api/mailroom/address":
+            return self.mailroom_address_post()
+        mail_action_match = re.fullmatch(r"/api/mailroom/items/([^/]+)/action", path)
+        if mail_action_match:
+            return self.mailroom_item_action_post(unquote(mail_action_match.group(1)))
+        if path == "/api/registered-agent/foreign-qualification":
+            return self.foreign_qualification_post()
+        partner_action_match = re.fullmatch(r"/api/partners/applications/([^/]+)/action", path)
+        if partner_action_match:
+            return self.partner_application_post(unquote(partner_action_match.group(1)))
+        if path == "/api/rewards/discovery":
+            return self.discovery_profile_post()
+        if path == "/api/sales-tax/connect-sandbox":
+            return self.sales_tax_connect_post()
+        sales_tax_action_match = re.fullmatch(r"/api/sales-tax/returns/([^/]+)/action", path)
+        if sales_tax_action_match:
+            return self.sales_tax_action_post(unquote(sales_tax_action_match.group(1)))
         if path == "/api/bookkeeping/connect-sandbox":
             return self.bookkeeping_connect_post()
         if path == "/api/taxes/start":
@@ -278,6 +325,9 @@ class CedarHandler(BaseHTTPRequestHandler):
         ops_tax_action_match = re.fullmatch(r"/api/ops/taxes/([^/]+)/action", path)
         if ops_tax_action_match:
             return self.ops_tax_action_post(unquote(ops_tax_action_match.group(1)))
+        ops_mail_action_match = re.fullmatch(r"/api/ops/mailroom/([^/]+)/process", path)
+        if ops_mail_action_match:
+            return self.ops_mailroom_process_post(unquote(ops_mail_action_match.group(1)))
         ops_transition = re.fullmatch(r"/api/ops/orders/([^/]+)/transition", path)
         if ops_transition:
             return self.ops_transition_post(unquote(ops_transition.group(1)))
@@ -534,6 +584,7 @@ class CedarHandler(BaseHTTPRequestHandler):
               <span class="sidebar-label">Operations</span>
               {self.sidebar_link('/ops/orders', 'Formation queue', 'FQ')}
               {self.sidebar_link('/ops/compliance', 'Compliance risk', 'CR')}
+              {self.sidebar_link('/ops/mailroom', 'Mailroom queue', 'MR')}
               {self.sidebar_link('/ops/taxes', 'Tax queue', 'TX')}
               {self.sidebar_link('/ops/audit', 'Audit log', 'AL')}
             """
@@ -546,10 +597,16 @@ class CedarHandler(BaseHTTPRequestHandler):
               {self.sidebar_link('/app/documents', 'Documents', 'DC')}
               {self.sidebar_link('/app/compliance', 'Compliance', 'CP')}
               <span class="sidebar-label">Products</span>
+              {self.sidebar_link('/app/registered-agent', 'Agent', 'AG')}
+              {self.sidebar_link('/app/mailroom', 'Mailroom', 'MR')}
+              {self.sidebar_link('/app/partners', 'Banking solutions', 'BN')}
               {self.sidebar_link('/app/assistant', 'AI assistant', 'AI')}
               {self.sidebar_link('/app/bookkeeping', 'Bookkeeping', 'BK')}
               {self.sidebar_link('/app/taxes', 'Taxes', 'TX')}
+              {self.sidebar_link('/app/sales-tax', 'Sales tax', 'ST')}
               {self.sidebar_link('/app/analytics', 'Analytics', 'AN')}
+              {self.sidebar_link('/app/equity', 'Equity', 'EQ')}
+              {self.sidebar_link('/app/rewards', 'Rewards', 'RW')}
               <span class="sidebar-label">Manage</span>
               {self.sidebar_link('/app/billing', 'Plans & billing', 'BL')}
               {self.sidebar_link('/app/support', 'Support', 'SP')}
@@ -810,19 +867,31 @@ class CedarHandler(BaseHTTPRequestHandler):
         ctx = get_dashboard_context(self.conn, self.user["id"])
         if not ctx:
             body = """
-            <section class="dashboard-welcome empty-workspace">
-              <div>
+            <section class="welcome-console">
+              <div class="welcome-title">
                 <span class="eyebrow">Founder workspace</span>
-                <h1>Build your company record</h1>
-                <p>Complete the guided formation intake to create a trackable order, document vault, and compliance calendar.</p>
+                <h1>Welcome to CedarHQ</h1>
+                <p>Choose the path that matches your company. Both flows create a real workspace, save progress, and keep simulated services clearly labeled.</p>
               </div>
-              <a class="button" href="/app/onboarding">Start company formation</a>
+              <div class="start-choice-grid">
+                <article class="start-choice-card">
+                  <div><span class="service-icon">US</span><h2>Already have a US company?</h2><p>Add an existing company, organize documents, and turn on compliance, mail, banking, bookkeeping, tax, and analytics workflows.</p></div>
+                  <a class="button" href="/app/onboarding?mode=existing">Add existing company</a>
+                </article>
+                <article class="start-choice-card">
+                  <div><span class="service-icon">+</span><h2>Start a new company</h2><p>Use the quiz, pick a state, review transparent costs, complete sandbox checkout, and track formation through evidence-backed milestones.</p></div>
+                  <a class="button" href="/app/onboarding">Start formation</a>
+                </article>
+              </div>
             </section>
-            <section class="empty-checklist" aria-label="Formation checklist">
-              <span><strong>1</strong> Entity and state</span>
-              <span><strong>2</strong> Founder information</span>
-              <span><strong>3</strong> Cost review</span>
-              <span><strong>4</strong> Sandbox checkout</span>
+            <section class="discovery-rail">
+              <span>Discover products</span>
+              <a href="/app/registered-agent">Agent</a>
+              <a href="/app/mailroom">Mailroom</a>
+              <a href="/app/taxes">Tax filing</a>
+              <a href="/app/bookkeeping">Accounting</a>
+              <a href="/app/partners">Banking</a>
+              <a href="/app/equity">Equity</a>
             </section>
             """
             return self.send_html("Overview", body)
@@ -911,8 +980,8 @@ class CedarHandler(BaseHTTPRequestHandler):
 
         service_html = "".join(
             [
-                service_row("Registered agent", bool(plan["registered_agent_included"]), "Sandbox setup pending" if not state_approved else "Sandbox coverage recorded"),
-                service_row("Virtual mailroom", bool(plan["mailroom_included"]), "Address selection follows approval"),
+                service_row("Registered agent", bool(plan["registered_agent_included"]), "Open Agent workspace for state coverage"),
+                service_row("Virtual mailroom", bool(plan["mailroom_included"]), "Choose address and process mail"),
                 service_row("Bookkeeping", bool(plan["bookkeeping_included"]), "No financial account connected"),
                 service_row("Tax preparation", bool(plan["tax_included"]), "Questionnaire not started"),
             ]
@@ -995,6 +1064,18 @@ class CedarHandler(BaseHTTPRequestHandler):
             <div class="section-heading"><div><span class="section-kicker">DOCUMENTS</span><h2>Recent files</h2></div><a href="/app/documents">Open vault</a></div>
             <div class="recent-documents">{''.join(document_html)}</div>
           </article>
+        </section>
+
+        <section class="product-console">
+          <div class="section-heading"><div><span class="section-kicker">OPERATING PRODUCTS</span><h2>Run the back office</h2></div></div>
+          <a href="/app/registered-agent"><span class="service-icon">AG</span><strong>Agent</strong><small>State coverage, notices, foreign qualification</small></a>
+          <a href="/app/mailroom"><span class="service-icon">MR</span><strong>Mailroom</strong><small>Address, scan, forward, recycle, archive</small></a>
+          <a href="/app/partners"><span class="service-icon">BN</span><strong>Banking</strong><small>Partner checklist and application status</small></a>
+          <a href="/app/taxes"><span class="service-icon">TX</span><strong>Tax filing</strong><small>Questionnaire, review, signature, submission states</small></a>
+          <a href="/app/bookkeeping"><span class="service-icon">BK</span><strong>Accounting</strong><small>Transactions, rules, reconciliation, monthly close</small></a>
+          <a href="/app/sales-tax"><span class="service-icon">ST</span><strong>Sales tax</strong><small>Nexus, registrations, returns, product tax codes</small></a>
+          <a href="/app/analytics"><span class="service-icon">AN</span><strong>Commerce analytics</strong><small>Shopify and Amazon sandbox metrics</small></a>
+          <a href="/app/rewards"><span class="service-icon">RW</span><strong>Rewards</strong><small>Credits and discovery sharing controls</small></a>
         </section>
 
         <section class="dashboard-bottom-bar">
@@ -1389,6 +1470,308 @@ class CedarHandler(BaseHTTPRequestHandler):
           {evidence}
         </article>
         """
+
+    def registered_agent_page(self, error: str = ""):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        ctx = registered_agent_context(self.conn, company["id"])
+        service_rows = "".join(
+            f"<article class='service-panel'><div><span class='service-icon'>AG</span><strong>{esc(service['state_code'])} registered agent</strong><small>Renews {esc(date_label(service['renewal_date']))}</small></div><span class='badge {esc(service['status'])}'>{esc(status_label(service['status']))}</span><a href='/api/evidence/{esc(service['evidence_id'])}/download'>Coverage evidence</a></article>"
+            for service in ctx["services"]
+        ) or "<p class='muted'>Registered-agent coverage appears after formation checkout.</p>"
+        notice_rows = "".join(
+            f"<article class='queue-row'><div><strong>{esc(notice['title'])}</strong><small>{esc(notice['state_code'])} &middot; {esc(status_label(notice['category']))} &middot; Received {esc(date_label(notice['received_at']))}</small></div><span class='badge {esc(notice['status'])}'>{esc(status_label(notice['status']))}</span></article>"
+            for notice in ctx["notices"]
+        ) or "<p class='muted'>No registered-agent notices have been scanned yet.</p>"
+        qualification_rows = "".join(
+            f"<article class='queue-row'><div><strong>{esc(item['state_code'])} foreign qualification</strong><small>{esc(item['reason'] or 'No reason recorded')}</small></div><span class='badge {esc(item['status'])}'>{esc(status_label(item['status']))}</span></article>"
+            for item in ctx["qualifications"]
+        ) or "<p class='muted'>No foreign qualification workflows yet.</p>"
+        body = f"""
+        <section class="workspace-head product-head">
+          <div><span class="eyebrow">Registered agent</span><h1>State coverage and notices</h1><p>Coverage, scanned notices, foreign qualification, and annual-report handling in one audit-backed workspace.</p></div>
+        </section>
+        {self.error_box(error)}
+        <section class="metric-grid four">
+          <article><span>States covered</span><strong>{len(ctx['services'])}</strong><small>Sandbox registered-agent records</small></article>
+          <article><span>Open notices</span><strong>{sum(1 for n in ctx['notices'] if n['status'] != 'closed')}</strong><small>Shared with operations</small></article>
+          <article><span>Foreign qualifications</span><strong>{len(ctx['qualifications'])}</strong><small>Replaceable state provider</small></article>
+          <article><span>Annual report help</span><strong>On</strong><small>State fees remain separate</small></article>
+        </section>
+        <section class="workspace-columns">
+          <article class="dashboard-card span-main"><div class="section-heading"><div><span class="section-kicker">COVERAGE</span><h2>Registered-agent states</h2></div></div><div class="service-panel-grid">{service_rows}</div></article>
+          <aside class="workspace-rail">
+            <article class="dashboard-card"><span class="section-kicker">FOREIGN QUALIFICATION</span><h2>Operate in another state</h2><form method="post" action="/api/registered-agent/foreign-qualification" class="stack"><input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}"><label>State code<input name="state_code" maxlength="2" required placeholder="CA"></label><label>Reason<textarea name="reason" rows="3" placeholder="Hiring, office, inventory, or sales activity"></textarea></label><button class="button" type="submit">Start workflow</button></form></article>
+            <article class="dashboard-card"><span class="section-kicker">DISCLOSURE</span><h2>No silent filing</h2><p class="disclosure">Sandbox workflows prepare checklists and evidence only. Production filings require provider credentials and explicit approval.</p></article>
+          </aside>
+        </section>
+        <section class="grid two service-section"><article class="dashboard-card"><div class="section-heading"><div><span class="section-kicker">NOTICES</span><h2>Scanned state mail</h2></div></div><div class="queue-list">{notice_rows}</div></article><article class="dashboard-card"><div class="section-heading"><div><span class="section-kicker">QUALIFICATION</span><h2>Expansion workflows</h2></div></div><div class="queue-list">{qualification_rows}</div></article></section>
+        """
+        self.send_html("Registered agent", body)
+
+    def foreign_qualification_post(self):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        try:
+            start_foreign_qualification(self.conn, company["id"], self.user["id"], data.get("state_code", ""), data.get("reason", ""))
+            self.redirect("/app/registered-agent?notice=Foreign qualification workflow started.")
+        except ValueError as exc:
+            self.registered_agent_page(str(exc))
+
+    def mailroom_page(self, error: str = ""):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        ctx = mailroom_context(self.conn, company["id"])
+        address_cards = []
+        for address in ctx["addresses"]:
+            selected_class = " selected" if address["selected_at"] else ""
+            address_cards.append(f"""
+              <article class="address-card{selected_class}">
+                <div><strong>{esc(address['label'])}</strong><small>{esc(address['address_line1'])}, {esc(address['city'])}, {esc(address['state_code'])} {esc(address['postal_code'])}</small></div>
+                <span class="badge {esc(address['form_1583_status'])}">{esc(status_label(address['form_1583_status']))}</span>
+                <form method="post" action="/api/mailroom/address">
+                  <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                  <input type="hidden" name="address_id" value="{esc(address['id'])}">
+                  <button class="button secondary small" type="submit">{'Selected' if address['selected_at'] else 'Use address'}</button>
+                </form>
+              </article>
+            """)
+        mail_rows = []
+        for item in ctx["items"]:
+            buttons = ""
+            if item["status"] in {"received", "scanned"}:
+                buttons = f"""
+                  <form method="post" action="/api/mailroom/items/{esc(item['id'])}/action" class="actions compact-actions">
+                    <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                    <button class="button secondary small" name="action" value="scan" type="submit">Scan</button>
+                    <button class="button secondary small" name="action" value="forward" type="submit">Forward</button>
+                    <button class="button secondary small" name="action" value="archive" type="submit">Archive</button>
+                    <button class="button secondary small" name="action" value="recycle" type="submit">Recycle</button>
+                  </form>
+                """
+            scan = f"<a href='/api/documents/{esc(item['scan_document_id'])}/download'>Download scan</a>" if item["scan_document_id"] else "<span class='muted'>Envelope preview only</span>"
+            mail_rows.append(f"""
+              <article class="mail-item">
+                <div><strong>{esc(item['sender'] or 'Unknown sender')}</strong><small>{esc(item['mail_type'])} &middot; {esc(item['tracking_number'] or 'No tracking')} &middot; {esc(item['address_label'] or 'No address')}</small></div>
+                <span class="badge {esc(item['status'])}">{esc(status_label(item['status']))}</span>
+                <div class="mail-actions">{scan}{buttons}</div>
+              </article>
+            """)
+        body = f"""
+        <section class="workspace-head product-head">
+          <div><span class="eyebrow">Virtual mailroom</span><h1>Business mail</h1><p>Select a US business address, request scans or forwarding, and track staff processing.</p></div>
+        </section>
+        {self.error_box(error)}
+        <section class="workspace-columns">
+          <article class="dashboard-card span-main"><div class="section-heading"><div><span class="section-kicker">ADDRESS</span><h2>Choose business address</h2></div><span class="badge warning">Form 1583 required</span></div><div class="address-grid">{''.join(address_cards)}</div></article>
+          <aside class="dashboard-card"><span class="section-kicker">CURRENT ADDRESS</span><h2>{esc(ctx['selected']['label'] if ctx['selected'] else 'Not selected')}</h2><p class="disclosure">{esc((ctx['selected']['address_line1'] + ', ' + ctx['selected']['city'] + ', ' + ctx['selected']['state_code']) if ctx['selected'] else 'Choose an address to create sandbox incoming mail.')}</p></aside>
+        </section>
+        <section class="dashboard-card service-section"><div class="section-heading"><div><span class="section-kicker">INCOMING MAIL</span><h2>Mail list</h2></div><span>{len(ctx['items'])} item(s)</span></div><div class="mail-list">{''.join(mail_rows) if mail_rows else '<p class="muted">Select an address to receive sandbox mail.</p>'}</div></section>
+        """
+        self.send_html("Mailroom", body)
+
+    def mailroom_address_post(self):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        try:
+            choose_mail_address(self.conn, company["id"], data.get("address_id", ""), self.user["id"])
+            self.redirect("/app/mailroom?notice=Business address selected and sandbox mail created.")
+        except ValueError as exc:
+            self.mailroom_page(str(exc))
+
+    def mailroom_item_action_post(self, item_id: str):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        try:
+            request_mail_action(self.conn, company["id"], item_id, self.user["id"], data.get("action", ""))
+            self.redirect("/app/mailroom?notice=Mailroom request sent to staff queue.")
+        except ValueError as exc:
+            self.mailroom_page(str(exc))
+
+    def partners_page(self, error: str = ""):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        ctx = partners_context(self.conn, company["id"])
+        rows = []
+        for app in ctx["applications"]:
+            checklist = json.loads(app["checklist_json"] or "[]")
+            checklist_html = "".join(f"<li>{esc(item)}</li>" for item in checklist)
+            action = {
+                "checklist": ("complete_checklist", "Mark checklist ready"),
+                "ready_to_send": ("send_sandbox", "Send sandbox application"),
+                "sent_to_partner": ("mark_review", "Move to partner review"),
+                "partner_review": ("request_more_info", "Request more info"),
+                "more_info_required": ("complete_checklist", "Resubmit checklist"),
+            }.get(app["status"])
+            action_html = ""
+            if action:
+                action_html = f"<form method='post' action='/api/partners/applications/{esc(app['id'])}/action'><input type='hidden' name='csrf_token' value='{esc(self.csrf_token())}'><button class='button small' name='action' value='{esc(action[0])}' type='submit'>{esc(action[1])}</button></form>"
+            evidence = f"<a href='/api/evidence/{esc(app['evidence_id'])}/download'>Download partner evidence</a>" if app["evidence_id"] else "<span class='muted'>No partner evidence yet</span>"
+            rows.append(f"""
+              <article class="partner-card">
+                <div class="card-head"><span class="badge {esc(app['status'])}">{esc(status_label(app['status']))}</span><span>{esc(status_label(app['partner_type']))}</span></div>
+                <h2>{esc(app['partner_name'])}</h2>
+                <ul>{checklist_html}</ul>
+                <p class="disclosure">{esc(app['disclaimer'])}</p>
+                <div class="actions">{action_html}{evidence}</div>
+              </article>
+            """)
+        body = f"""
+        <section class="workspace-head product-head">
+          <div><span class="eyebrow">Partner solutions</span><h1>Banking and payments</h1><p>Prefilled partner checklists for banking, payment processing, and payroll. Approval always belongs to the partner.</p></div>
+        </section>
+        {self.error_box(error)}
+        <section class="grid three">{''.join(rows)}</section>
+        """
+        self.send_html("Banking solutions", body)
+
+    def partner_application_post(self, application_id: str):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        try:
+            partner_application_action(self.conn, company["id"], application_id, self.user["id"], data.get("action", ""))
+            self.redirect("/app/partners?notice=Partner application status updated. No approval is guaranteed.")
+        except ValueError as exc:
+            self.partners_page(str(exc))
+
+    def equity_page(self):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        founders = self.conn.execute("SELECT * FROM company_founders WHERE company_id = ? ORDER BY ownership_percent DESC", (company["id"],)).fetchall()
+        rows = "".join(f"<tr><td>{esc(row['full_name'])}</td><td>{esc(row['email'])}</td><td>{esc(row['ownership_percent'])}%</td><td>{esc(row['shares'] or 'Unissued')}</td></tr>" for row in founders)
+        body = f"""
+        <section class="workspace-head product-head"><div><span class="eyebrow">Equity</span><h1>Ownership records</h1><p>Founder ownership and stock-document status from the formation intake and vault.</p></div></section>
+        <section class="dashboard-card"><div class="section-heading"><div><span class="section-kicker">CAP TABLE STARTER</span><h2>Founder ownership</h2></div><span class="badge warning">Document review required</span></div><div class="table-wrap"><table><thead><tr><th>Founder</th><th>Email</th><th>Ownership</th><th>Shares</th></tr></thead><tbody>{rows or '<tr><td colspan="4">No founder ownership recorded.</td></tr>'}</tbody></table></div><p class="disclosure">This is a planning record. Securities, tax, and legal treatment require professional review before issuance.</p></section>
+        """
+        self.send_html("Equity", body)
+
+    def rewards_page(self, error: str = ""):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        ctx = rewards_context(self.conn, company["id"])
+        profile = ctx["profile"]
+        reward_cards = "".join(
+            f"<article class='reward-card'><span class='service-icon'>RW</span><h2>{esc(row['title'])}</h2><p>{esc(row['eligibility'])}</p><strong>{esc(cents(row['estimated_value_cents']))} estimated value</strong><span class='badge {esc(row['redemption_status'])}'>{esc(status_label(row['redemption_status']))}</span></article>"
+            for row in ctx["rewards"]
+        )
+        body = f"""
+        <section class="workspace-head product-head"><div><span class="eyebrow">Rewards and discovery</span><h1>Founder benefits</h1><p>Partner credits and investor-discovery profile controls with explicit sharing permission.</p></div></section>
+        {self.error_box(error)}
+        <section class="workspace-columns">
+          <article class="dashboard-card span-main"><div class="section-heading"><div><span class="section-kicker">REWARDS</span><h2>Available partner offers</h2></div></div><div class="reward-grid">{reward_cards}</div></article>
+          <aside class="dashboard-card"><span class="section-kicker">VC DISCOVERY</span><h2>Sharing controls</h2><form method="post" action="/api/rewards/discovery" class="stack"><input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}"><label>Founder headline<textarea name="founder_headline" rows="3">{esc(profile['founder_headline'] if profile else '')}</textarea></label><label>Target investor<textarea name="target_investor" rows="3">{esc(profile['target_investor'] if profile else '')}</textarea></label><label class="compact-check"><input type="checkbox" name="permission_to_share" value="yes"{checked(profile['permission_to_share'] if profile else 0, 1)}> Allow CedarHQ to share this profile in sandbox discovery</label><button class="button" type="submit">Save controls</button></form></aside>
+        </section>
+        """
+        self.send_html("Rewards", body)
+
+    def discovery_profile_post(self):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        save_discovery_profile(self.conn, company["id"], self.user["id"], data)
+        self.redirect("/app/rewards?notice=Discovery sharing controls saved.")
+
+    def sales_tax_page(self, error: str = ""):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        ctx = sales_tax_context(self.conn, company["id"])
+        if not ctx["account"]:
+            body = f"""
+            <section class="workspace-head product-head"><div><span class="eyebrow">Sales tax</span><h1>Nexus and filings</h1><p>Monitor state thresholds, product tax codes, registrations, returns, and approvals.</p></div></section>
+            {self.error_box(error)}
+            <section class="connection-empty"><div><span class="section-kicker">SANDBOX CONNECTOR</span><h2>Connect sales data for nexus monitoring</h2><p>This creates sample state threshold, return, and product-tax-code records. Production uses a replaceable sales-tax provider.</p></div><form method="post" action="/api/sales-tax/connect-sandbox"><input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}"><button class="button" type="submit">Connect sandbox sales tax</button></form></section>
+            """
+            return self.send_html("Sales tax", body)
+        nexus_rows = "".join(f"<tr><td>{esc(row['state_code'])}</td><td><span class='badge {esc(row['status'])}'>{esc(status_label(row['status']))}</span></td><td>{esc(cents(row['trailing_revenue_cents']))}</td><td>{row['trailing_orders']}</td><td>{esc(date_label(row['next_review_date']))}</td></tr>" for row in ctx["nexus"])
+        return_rows = []
+        for row in ctx["returns"]:
+            next_action = {
+                "nexus_review": ("not_required", "Mark not required"),
+                "registration_required": ("mark_registered", "Mark registered"),
+                "registered": ("prepare_return", "Prepare return"),
+                "return_preparation": ("send_for_approval", "Send for approval"),
+                "ready_for_approval": ("approve_to_file", "Approve to file"),
+                "approved_to_file": ("sandbox_submit", "Sandbox submit"),
+                "submitted": ("sandbox_accept", "Record acceptance"),
+            }.get(row["status"])
+            button = f"<form method='post' action='/api/sales-tax/returns/{esc(row['id'])}/action'><input type='hidden' name='csrf_token' value='{esc(self.csrf_token())}'><button class='button secondary small' name='action' value='{esc(next_action[0])}' type='submit'>{esc(next_action[1])}</button></form>" if next_action else ""
+            evidence = f"<a href='/api/evidence/{esc(row['evidence_id'])}/download'>Evidence</a>" if row["evidence_id"] else "<span class='muted'>No filing evidence</span>"
+            return_rows.append(f"<tr><td>{esc(row['state_code'])}</td><td>{esc(row['period'])}</td><td>{esc(date_label(row['due_date']))}</td><td>{esc(cents(row['tax_collected_cents']))}</td><td><span class='badge {esc(row['status'])}'>{esc(status_label(row['status']))}</span></td><td>{button}{evidence}</td></tr>")
+        product_rows = "".join(f"<tr><td>{esc(row['sku'])}</td><td>{esc(row['name'])}</td><td>{esc(row['tax_code'])}</td><td><span class='badge ok'>{esc(status_label(row['status']))}</span></td></tr>" for row in ctx["products"])
+        body = f"""
+        <section class="workspace-head product-head"><div><span class="eyebrow">Sales tax</span><h1>Nexus and filings</h1><p>Threshold monitoring, product tax-code mapping, return approvals, sandbox submission evidence, and exports.</p></div></section>
+        {self.error_box(error)}
+        <section class="metric-grid four">
+          <article><span>Connector</span><strong>{esc(status_label(ctx['account']['status']))}</strong><small>Sandbox provider</small></article>
+          <article><span>Nexus states</span><strong>{len(ctx['nexus'])}</strong><small>Monitoring records</small></article>
+          <article><span>Open returns</span><strong>{sum(1 for r in ctx['returns'] if r['status'] not in {'accepted','not_required'})}</strong><small>Approval gated</small></article>
+          <article><span>Products mapped</span><strong>{len(ctx['products'])}</strong><small>Tax code table</small></article>
+        </section>
+        <section class="dashboard-card service-section"><div class="section-heading"><div><span class="section-kicker">NEXUS</span><h2>State threshold monitor</h2></div></div><div class="table-wrap"><table><thead><tr><th>State</th><th>Status</th><th>Revenue</th><th>Orders</th><th>Next review</th></tr></thead><tbody>{nexus_rows}</tbody></table></div></section>
+        <section class="dashboard-card service-section"><div class="section-heading"><div><span class="section-kicker">RETURNS</span><h2>Approval-gated filings</h2></div></div><div class="table-wrap"><table><thead><tr><th>State</th><th>Period</th><th>Due</th><th>Tax collected</th><th>Status</th><th>Action</th></tr></thead><tbody>{''.join(return_rows)}</tbody></table></div><p class="disclosure">Sandbox actions never submit a state filing unless a production provider and explicit approval are added.</p></section>
+        <section class="dashboard-card service-section"><div class="section-heading"><div><span class="section-kicker">PRODUCTS</span><h2>Tax-code mapping</h2></div></div><div class="table-wrap"><table><thead><tr><th>SKU</th><th>Name</th><th>Tax code</th><th>Status</th></tr></thead><tbody>{product_rows}</tbody></table></div></section>
+        """
+        self.send_html("Sales tax", body)
+
+    def sales_tax_connect_post(self):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        connect_sales_tax_sandbox(self.conn, company["id"], self.user["id"])
+        self.redirect("/app/sales-tax?notice=Sandbox sales-tax connector created.")
+
+    def sales_tax_action_post(self, return_id: str):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        try:
+            sales_tax_action(self.conn, company["id"], return_id, self.user["id"], data.get("action", ""))
+            self.redirect("/app/sales-tax?notice=Sales-tax status updated.")
+        except ValueError as exc:
+            self.sales_tax_page(str(exc))
 
     def billing_page(self):
         if not self.require_auth():
@@ -2070,6 +2453,55 @@ class CedarHandler(BaseHTTPRequestHandler):
         <section class="grid two">{cards}</section>
         """
         self.send_html("Ops compliance", body)
+
+    def ops_mailroom_page(self, error: str = ""):
+        if not self.require_ops():
+            return
+        items = ops_mailroom_context(self.conn)
+        rows = []
+        for item in items:
+            can_process = item["status"] in {"scan_requested", "forward_requested", "archive_requested", "recycle_requested"}
+            form = ""
+            if can_process:
+                form = f"""
+                  <form method="post" action="/api/ops/mailroom/{esc(item['id'])}/process">
+                    <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                    <button class="button small" type="submit">Process request</button>
+                  </form>
+                """
+            rows.append(f"""
+              <article class="card">
+                <div class="card-head"><span class="badge {esc(item['status'])}">{esc(status_label(item['status']))}</span><span>{esc(item['tracking_number'] or 'No tracking')}</span></div>
+                <h2>{esc(item['sender'] or 'Unknown sender')}</h2>
+                <p>{esc(item['name_choice_1'] or item['legal_name'] or 'Company')} &middot; {esc(item['address_label'] or 'No address selected')}</p>
+                <dl class="compact-dl">
+                  <div><dt>Received</dt><dd>{esc(timestamp_label(item['created_at']))}</dd></div>
+                  <div><dt>Requested</dt><dd>{esc(timestamp_label(item['action_requested_at']))}</dd></div>
+                  <div><dt>Forwarding cost</dt><dd>{esc(cents(item['forwarding_cost_cents'] or 0))}</dd></div>
+                </dl>
+                {form or '<span class="muted">No staff action currently available.</span>'}
+              </article>
+            """)
+        body = f"""
+        <section class="workspace-head">
+          <div><span class="eyebrow">Mailroom operations</span><h1>Scan and forwarding queue</h1><p>Customer requests and staff processing use the same mail item statuses.</p></div>
+        </section>
+        {self.error_box(error)}
+        <section class="grid two">{''.join(rows) if rows else '<p class="muted">No mailroom items yet.</p>'}</section>
+        """
+        self.send_html("Mailroom queue", body)
+
+    def ops_mailroom_process_post(self, item_id: str):
+        if not self.require_ops():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        try:
+            ops_process_mail_action(self.conn, item_id, self.user["id"])
+            self.redirect("/ops/mailroom?notice=Mailroom item processed with sandbox evidence.")
+        except ValueError as exc:
+            self.ops_mailroom_page(str(exc))
 
     def ops_audit_page(self):
         if not self.require_ops():

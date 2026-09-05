@@ -72,7 +72,7 @@ class VerticalSliceTests(unittest.TestCase):
             self.assertGreaterEqual(len(compliance), 4)
             dashboard = get_dashboard_context(conn, user["id"])
             self.assertEqual(dashboard["order"]["id"], order["id"])
-            self.assertEqual(dashboard["progress_percent"], 14)
+            self.assertEqual(dashboard["progress_percent"], 12)
             self.assertEqual(dashboard["next_step"]["step_key"], "operations_review")
             self.assertGreaterEqual(len(dashboard["documents"]), 2)
             self.assertGreaterEqual(len(dashboard["attention_items"]), 1)

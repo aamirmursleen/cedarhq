@@ -128,6 +128,54 @@ ASSISTANT_ACTION_TRANSITIONS = {
     "cancelled": set(),
 }
 
+MAIL_ITEM_TRANSITIONS = {
+    "received": {"scan_requested", "forward_requested", "archive_requested", "recycle_requested"},
+    "scan_requested": {"scanned", "archived"},
+    "forward_requested": {"forwarded", "archived"},
+    "archive_requested": {"archived"},
+    "recycle_requested": {"recycled"},
+    "scanned": {"archived", "forward_requested"},
+    "forwarded": {"archived"},
+    "archived": set(),
+    "recycled": set(),
+}
+
+FOREIGN_QUALIFICATION_TRANSITIONS = {
+    "not_started": {"questionnaire", "cancelled"},
+    "questionnaire": {"operations_review", "blocked", "cancelled"},
+    "operations_review": {"submitted", "blocked", "cancelled"},
+    "submitted": {"approved", "rejected"},
+    "rejected": {"operations_review", "cancelled"},
+    "approved": set(),
+    "blocked": {"questionnaire", "operations_review", "cancelled"},
+    "cancelled": set(),
+}
+
+PARTNER_APPLICATION_TRANSITIONS = {
+    "checklist": {"ready_to_send", "cancelled"},
+    "ready_to_send": {"sent_to_partner", "cancelled"},
+    "sent_to_partner": {"partner_review", "cancelled"},
+    "partner_review": {"approved", "declined", "more_info_required"},
+    "more_info_required": {"ready_to_send", "cancelled"},
+    "approved": set(),
+    "declined": set(),
+    "cancelled": set(),
+}
+
+SALES_TAX_RETURN_TRANSITIONS = {
+    "nexus_review": {"registration_required", "not_required", "return_preparation"},
+    "registration_required": {"registered", "blocked"},
+    "blocked": {"registration_required", "return_preparation"},
+    "registered": {"return_preparation"},
+    "return_preparation": {"ready_for_approval"},
+    "ready_for_approval": {"approved_to_file", "return_preparation"},
+    "approved_to_file": {"submitted"},
+    "submitted": {"accepted", "rejected"},
+    "rejected": {"return_preparation"},
+    "accepted": set(),
+    "not_required": set(),
+}
+
 
 class StatusError(ValueError):
     pass

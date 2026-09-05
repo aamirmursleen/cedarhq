@@ -13,6 +13,12 @@ python3 app.py --host 127.0.0.1 --port 8088
 
 Open `http://127.0.0.1:8088`.
 
+Current Dokploy test deployment:
+
+```text
+https://cedarhq.144.76.96.3.sslip.io
+```
+
 For access from another device on the same network, bind to all interfaces and open the host IP:
 
 ```bash
@@ -28,12 +34,11 @@ Demo users created only by `--seed-demo`:
 ## Validation
 
 ```bash
-python3 -m unittest
-python3 -m py_compile app.py cedarhq/*.py
+python3 -m unittest discover -s tests
 ```
 
-Use `vm115-build` for manual validation on VM115 when available. Do not run local bundlers, Docker builds, or full local browser suites on this host.
+Use `VM115_BUILD_MODE=docker vm115-build .` for manual build validation on VM115. Do not run local bundlers, Docker builds, or full local browser suites on this host.
 
 ## Production Notes
 
-Before production use, configure real credentials for Google OAuth, Stripe, email delivery, object storage/KMS, e-signature, legal filing, registered agent, mailroom, banking, accounting, tax, Shopify, Amazon, and AI providers. Sandbox workflows are clearly labeled and must not be represented as legal filings.
+Before production use, configure real credentials for Google OAuth, Stripe, email delivery, object storage/KMS, e-signature, legal filing, registered agent, mailroom, banking, accounting, tax, sales tax, Shopify, Amazon, and AI providers. Sandbox workflows are clearly labeled and must not be represented as legal filings or guaranteed banking/payment approvals.
