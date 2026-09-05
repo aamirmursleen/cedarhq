@@ -992,6 +992,188 @@ class CedarHandler(BaseHTTPRequestHandler):
             renewal_date = "Not available"
         first_name = (self.user["name"] or "Founder").split()[0]
         support_open = (ctx["support"]["open_count"] or 0) if ctx["support"] else 0
+        ra_ctx = registered_agent_context(self.conn, company["id"])
+        mail_ctx = mailroom_context(self.conn, company["id"])
+        partner_ctx = partners_context(self.conn, company["id"])
+        rewards_ctx = rewards_context(self.conn, company["id"])
+        sales_ctx = sales_tax_context(self.conn, company["id"])
+        books_ctx = bookkeeping_context(self.conn, company["id"])
+        tax_ctx = taxes_context(self.conn, company["id"])
+        commerce_ctx = analytics_context(self.conn, company["id"])
+
+        selected_mail = mail_ctx["selected"]
+        first_address = mail_ctx["addresses"][0] if mail_ctx["addresses"] else None
+        mail_pending = sum(1 for item in mail_ctx["items"] if item["status"] in {"received", "scan_requested", "forward_requested"})
+        partner_ready = next((item for item in partner_ctx["applications"] if item["status"] in {"checklist", "ready_to_send", "more_info_required"}), None)
+        missing_commerce = [provider for provider in ["shopify", "amazon"] if provider not in {row["provider"] for row in commerce_ctx["connections"]}]
+        sales_open = sum(1 for item in sales_ctx["returns"] if item["status"] not in {"accepted", "not_required"})
+        discovery_status = rewards_ctx["profile"]["status"] if rewards_ctx["profile"] else "draft"
+        tax_active = tax_ctx["active"]
+        tax_year = datetime.now().year - 1
+        service_html = "".join(
+            [
+                service_row("Registered agent", bool(plan["registered_agent_included"]), f"{len(ra_ctx['services'])} state coverage record(s)"),
+                service_row("Virtual mailroom", bool(plan["mailroom_included"]), selected_mail["label"] if selected_mail else "Address not selected yet"),
+                service_row("Bookkeeping", bool(plan["bookkeeping_included"]), f"{len(books_ctx['accounts'])} connected account(s)"),
+                service_row("Tax preparation", bool(plan["tax_included"]), tax_active["status"].replace("_", " ") if tax_active else "No workflow started"),
+            ]
+        )
+
+        def workflow_card(icon: str, title: str, status: str, detail: str, action_html: str, href: str) -> str:
+            return f"""
+              <article class="workflow-card">
+                <div class="workflow-card-top">
+                  <span class="service-icon">{esc(icon)}</span>
+                  <span class="badge {esc(status)}">{esc(status_label(status))}</span>
+                </div>
+                <h3>{esc(title)}</h3>
+                <p>{esc(detail)}</p>
+                <div class="workflow-card-actions">{action_html}<a class="button secondary small" href="{esc(href)}">Open</a></div>
+              </article>
+            """
+
+        mail_action = ""
+        if not selected_mail and first_address:
+            mail_action = f"""
+              <form method="post" action="/api/mailroom/address">
+                <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                <input type="hidden" name="address_id" value="{esc(first_address['id'])}">
+                <button class="button small" type="submit">Choose address</button>
+              </form>
+            """
+        elif mail_pending:
+            mail_action = "<a class='button small' href='/app/mailroom'>Process mail</a>"
+        else:
+            mail_action = "<a class='button small' href='/app/mailroom'>View mail</a>"
+
+        partner_action = ""
+        if partner_ready:
+            next_partner_action = "send_sandbox" if partner_ready["status"] == "ready_to_send" else "complete_checklist"
+            partner_label = "Send sandbox application" if partner_ready["status"] == "ready_to_send" else "Mark checklist ready"
+            partner_action = f"""
+              <form method="post" action="/api/partners/applications/{esc(partner_ready['id'])}/action">
+                <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                <button class="button small" name="action" value="{esc(next_partner_action)}" type="submit">{esc(partner_label)}</button>
+              </form>
+            """
+        else:
+            partner_action = "<a class='button small' href='/app/partners'>View applications</a>"
+
+        tax_action_html = ""
+        if tax_active:
+            tax_action_html = "<a class='button small' href='/app/taxes'>Continue tax workflow</a>"
+        else:
+            tax_action_html = f"""
+              <form method="post" action="/api/taxes/start">
+                <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                <input type="hidden" name="filing_type" value="1120">
+                <input type="hidden" name="tax_year" value="{tax_year}">
+                <button class="button small" type="submit">Start Form 1120</button>
+              </form>
+            """
+
+        books_action = "<a class='button small' href='/app/bookkeeping'>Review ledger</a>"
+        if not books_ctx["accounts"]:
+            books_action = f"""
+              <form method="post" action="/api/bookkeeping/connect-sandbox">
+                <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                <button class="button small" type="submit">Connect ledger</button>
+              </form>
+            """
+
+        sales_action = "<a class='button small' href='/app/sales-tax'>Review returns</a>"
+        if not sales_ctx["account"]:
+            sales_action = f"""
+              <form method="post" action="/api/sales-tax/connect-sandbox">
+                <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                <button class="button small" type="submit">Connect sales tax</button>
+              </form>
+            """
+
+        commerce_action = "<a class='button small' href='/app/analytics'>View analytics</a>"
+        if missing_commerce:
+            commerce_action = f"""
+              <form method="post" action="/api/commerce/connect-sandbox">
+                <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+                <input type="hidden" name="provider" value="{esc(missing_commerce[0])}">
+                <button class="button small" type="submit">Connect {esc(missing_commerce[0].title())}</button>
+              </form>
+            """
+
+        workflow_cards = [
+            workflow_card(
+                "FM",
+                "Register or finish formation",
+                order["status"],
+                f"{len(ctx['completed_steps'])} of {len(ctx['timeline'])} verified milestones complete. Completed steps require evidence.",
+                f"<a class='button small' href='/app/orders/{esc(order['id'])}'>Continue formation</a>",
+                f"/app/orders/{esc(order['id'])}",
+            ),
+            workflow_card(
+                "AG",
+                "Registered agent",
+                ra_ctx["services"][0]["status"] if ra_ctx["services"] else "pending",
+                f"{len(ra_ctx['services'])} covered state(s), {len(ra_ctx['notices'])} notice(s), {len(ra_ctx['qualifications'])} foreign qualification workflow(s).",
+                "<a class='button small' href='/app/registered-agent'>Manage agent</a>",
+                "/app/registered-agent",
+            ),
+            workflow_card(
+                "MR",
+                "Virtual mailroom",
+                "active" if selected_mail else "pending",
+                f"{selected_mail['label'] if selected_mail else 'No address selected'}; {mail_pending} item(s) need handling.",
+                mail_action,
+                "/app/mailroom",
+            ),
+            workflow_card(
+                "BN",
+                "Banking and payments",
+                partner_ready["status"] if partner_ready else "partner_review",
+                "Prefilled applications are sandboxed. Banking and processor approval belongs to the partner.",
+                partner_action,
+                "/app/partners",
+            ),
+            workflow_card(
+                "TX",
+                "Tax filing",
+                tax_active["status"] if tax_active else "pending",
+                f"{status_label(tax_active['filing_type']) + ' ' + str(tax_active['tax_year']) if tax_active else 'No tax workflow started'}; filings require review and signature.",
+                tax_action_html,
+                "/app/taxes",
+            ),
+            workflow_card(
+                "BK",
+                "Accounting",
+                "connected" if books_ctx["accounts"] else "pending",
+                f"{len(books_ctx['accounts'])} account(s), {books_ctx['uncategorized_count']} transaction(s) need categorization.",
+                books_action,
+                "/app/bookkeeping",
+            ),
+            workflow_card(
+                "ST",
+                "Sales tax",
+                sales_ctx["account"]["status"] if sales_ctx["account"] else "pending",
+                f"{len(sales_ctx['nexus'])} nexus state(s), {sales_open} open return(s), {len(sales_ctx['products'])} product code(s).",
+                sales_action,
+                "/app/sales-tax",
+            ),
+            workflow_card(
+                "AN",
+                "Commerce analytics",
+                "connected" if commerce_ctx["connections"] else "pending",
+                f"{len(commerce_ctx['connections'])} connector(s), {commerce_ctx['totals']['orders_count']} order(s), {cents(commerce_ctx['totals']['revenue_cents'])} revenue.",
+                commerce_action,
+                "/app/analytics",
+            ),
+            workflow_card(
+                "RW",
+                "Rewards and discovery",
+                discovery_status,
+                f"{len(rewards_ctx['rewards'])} partner reward(s). Investor discovery requires explicit opt-in.",
+                "<a class='button small' href='/app/rewards'>Set controls</a>",
+                "/app/rewards",
+            ),
+        ]
 
         body = f"""
         <section class="dashboard-welcome">
@@ -1004,6 +1186,14 @@ class CedarHandler(BaseHTTPRequestHandler):
             <span class="badge {esc(order['status'])}">{esc(status_label(order['status']))}</span>
             <a class="button secondary" href="/app/orders/{esc(order['id'])}">View formation</a>
           </div>
+        </section>
+
+        <section class="workflow-board">
+          <div class="section-heading">
+            <div><span class="section-kicker">WHAT DO YOU WANT TO DO?</span><h2>Company operating steps</h2></div>
+            <span class="badge warning">Actions are sandboxed</span>
+          </div>
+          <div class="workflow-card-grid">{''.join(workflow_cards)}</div>
         </section>
 
         <section class="dashboard-grid">

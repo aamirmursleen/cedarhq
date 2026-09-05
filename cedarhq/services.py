@@ -315,14 +315,67 @@ def reset_password(conn, token: str, password: str):
 
 def seed_demo(conn) -> None:
     ensure_reference_data(conn)
+    demo_users = {}
     for email, name, role in [
         ("founder@cedarhq.local", "Demo Founder", "founder"),
         ("ops@cedarhq.local", "Operations Reviewer", "staff"),
         ("admin@cedarhq.local", "CedarHQ Admin", "admin"),
     ]:
-        if conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone():
+        existing = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        if existing:
+            demo_users[email] = existing
             continue
-        create_user(conn, email, "ChangeMe123!", name, role=role, verified=True)
+        demo_users[email] = create_user(conn, email, "ChangeMe123!", name, role=role, verified=True)
+    founder = demo_users.get("founder@cedarhq.local")
+    if not founder:
+        return
+    existing_order = get_latest_order_for_user(conn, founder["id"])
+    if existing_order:
+        return
+    save_onboarding(
+        conn,
+        founder["id"],
+        {
+            "venture_funding": "yes",
+            "issue_equity": "yes",
+            "pass_through_tax": "no",
+            "multiple_owners": "yes",
+            "international_founder": "yes",
+            "entity_type": "c_corp",
+            "state_code": "DE",
+            "name_choice_1": "Cedar Demo Inc",
+            "name_choice_2": "Cedar Demo Labs Inc",
+            "name_choice_3": "Cedar Demo Technologies Inc",
+            "business_purpose": "E-commerce software, analytics, and back-office operations.",
+            "industry": "Software",
+            "share_count": "10000000",
+            "founder_full_name": "Demo Founder",
+            "founder_email": "founder@cedarhq.local",
+            "founder_ownership_percent": "100",
+            "founder_shares": "10000000",
+            "address_line1": "214 North Market Street",
+            "city": "Wilmington",
+            "region": "DE",
+            "postal_code": "19801",
+            "country": "United States",
+            "plan_slug": "complete_back_office",
+            "current_step": "checkout",
+        },
+    )
+    order = create_checkout_and_order(conn, founder, "http://127.0.0.1:8088")
+    try:
+        from .expansion import choose_mail_address, connect_sales_tax_sandbox, mailroom_context
+        from .workspaces import connect_sandbox_commerce, connect_sandbox_finance
+
+        connect_sandbox_finance(conn, order["company_id"], founder["id"])
+        connect_sandbox_commerce(conn, order["company_id"], founder["id"], "shopify")
+        connect_sandbox_commerce(conn, order["company_id"], founder["id"], "amazon")
+        connect_sales_tax_sandbox(conn, order["company_id"], founder["id"])
+        mail = mailroom_context(conn, order["company_id"])
+        if mail["addresses"]:
+            choose_mail_address(conn, order["company_id"], mail["addresses"][0]["id"], founder["id"])
+    except Exception as exc:
+        audit(conn, founder["id"], order["company_id"], order["id"], "demo.seed_partial", f"Demo workspace created; optional service seeding skipped: {exc}")
 
 
 def ensure_user_company(conn, user_id: str):

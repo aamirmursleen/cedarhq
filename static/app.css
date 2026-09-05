@@ -522,6 +522,63 @@ th {
   margin-bottom: 0.1rem;
 }
 
+.workflow-board {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #2a2e36;
+  border-radius: var(--radius);
+  background: #181b20;
+}
+
+.workflow-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.workflow-card {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+  min-height: 260px;
+  padding: 1rem;
+  border: 1px solid #303540;
+  border-radius: var(--radius);
+  background: #20242b;
+}
+
+.workflow-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.workflow-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.workflow-card p {
+  margin: 0;
+  color: #a3a9b3;
+  line-height: 1.55;
+}
+
+.workflow-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin-top: auto;
+}
+
+.workflow-card-actions form {
+  margin: 0;
+}
+
 .product-console a,
 .service-panel,
 .address-card,
@@ -2407,6 +2464,7 @@ dd {
   }
 
   .product-console,
+  .workflow-card-grid,
   .address-grid,
   .reward-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2500,6 +2558,7 @@ dd {
   .commerce-connectors,
   .workspace-rail,
   .product-console,
+  .workflow-card-grid,
   .address-grid,
   .reward-grid,
   .start-choice-grid {

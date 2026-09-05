@@ -9,6 +9,8 @@
 - Founder overview upgraded to a database-backed command center with persistent workspace navigation, evidence-backed formation progress, next actions, company record, plan coverage, transparent billing, compliance deadlines, recent documents, and support status.
 - Product workspaces implemented for a source-cited AI assistant, multi-account bookkeeping, tax preparation/status workflows, and Shopify/Amazon commerce analytics.
 - Firstbase-style product expansion implemented with original CedarHQ UI: registered-agent workspace, virtual mailroom, banking/payment/payroll partner applications, equity starter records, rewards/discovery controls, sales-tax nexus/returns, and staff mailroom processing.
+- Founder dashboard upgraded again into a working action board: formation, agent, mailroom, banking/payments, tax filing, accounting, sales tax, commerce analytics, and rewards all show live status plus direct next-action controls where available.
+- Demo seeding now creates a complete company/order workspace for `founder@cedarhq.local` and connects sandbox ledger, Shopify, Amazon, sales tax, registered agent, and mailroom records so the dashboard is populated immediately after login.
 - Staff tax queue implemented with evidence-backed sandbox submission, acceptance, and rejection controls.
 - Staff mailroom queue implemented; customer scan/forward/archive/recycle requests and staff processing share the same database-backed mail item status.
 - Public Dokploy test deployment created at `https://cedarhq.144.76.96.3.sslip.io`.
@@ -48,6 +50,7 @@
 - Passed after Dokploy deployment: public HTTPS GET for home and signup, founder login, authenticated founder pages (`/app`, onboarding, documents, compliance, bookkeeping, taxes, analytics, assistant, billing, support), staff tax operations page, admin login and `/admin` redirect to operations.
 - Passed after Firstbase-style expansion deployment restart: public HTTPS founder routes `/app`, `/app/registered-agent`, `/app/mailroom`, `/app/partners`, `/app/equity`, `/app/rewards`, `/app/sales-tax`, `/app/documents`, `/app/compliance`; staff routes `/ops/mailroom`, `/ops/orders`, `/ops/compliance`.
 - Passed live mailroom workflow: founder selected business address, founder requested scan, staff processed scan, founder mailroom showed `Scanned` and a downloadable scan document.
+- Passed after dashboard action-board update: `python3 -m unittest discover -s tests`, `VM115_BUILD_MODE=docker vm115-build .`, Dokploy restart, and public HTTPS founder dashboard smoke showing `Cedar Demo Inc`, `Company operating steps`, mailroom, banking/payments, sales tax, commerce analytics, and live connected-account counts.
 - Blocked: visual browser verification because the `agent-browser` CLI/tool is not available in this environment.
 - Completed reference inspection: the supplied Moonpush dashboard PNG decrypted successfully and was used only as a layout/navigation-density reference.
 - Completed reference inspection: the second Moonpush PNG decrypted successfully and confirmed the requested five-product navigation model (assistant, formation, bookkeeping, taxes, analytics).
