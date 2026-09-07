@@ -514,9 +514,8 @@ class CedarHandler(BaseHTTPRequestHandler):
           <strong>{esc(title)}</strong>
         </div>
         <div class="topbar-actions">
-          <a class="topbar-link" href="/app/support">Help</a>
-          <a class="topbar-link" href="/app/billing">Billing</a>
-          <span class="badge warning">Sandbox services</span>
+          <a class="topbar-icon" href="/app/support" title="Notifications and support" aria-label="Notifications and support">!</a>
+          <a class="topbar-plan" href="/app/billing" title="Plan and billing">PRO</a>
           <span class="topbar-avatar" title="{esc(self.user['name'] or self.user['email'])}">{esc(user_initials(self.user['name']))}</span>
         </div>
       </header>
@@ -627,10 +626,14 @@ class CedarHandler(BaseHTTPRequestHandler):
             """
         return f"""
         <aside class="sidebar">
-          <a class="brand sidebar-brand" href="/">
-            <img src="/static/brand-mark.svg" width="32" height="32" alt="">
-            <span>CedarHQ</span>
-          </a>
+          <div class="sidebar-brand-row">
+            <a class="brand sidebar-brand" href="/">
+              <img src="/static/brand-mark.svg" width="32" height="32" alt="">
+              <span>CedarHQ</span>
+            </a>
+            <span class="sidebar-lang">English</span>
+            <span class="sidebar-collapse">K</span>
+          </div>
           {primary_action}
           <div class="company-switcher">
             <span class="company-avatar">{esc(company_name[:1].upper())}</span>
