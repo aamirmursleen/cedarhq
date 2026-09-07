@@ -11,6 +11,7 @@
 - Firstbase-style product expansion implemented with original CedarHQ UI: registered-agent workspace, virtual mailroom, banking/payment/payroll partner applications, equity starter records, rewards/discovery controls, sales-tax nexus/returns, and staff mailroom processing.
 - Founder dashboard upgraded again into a working action board: formation, agent, mailroom, banking/payments, tax filing, accounting, sales tax, commerce analytics, and rewards all show live status plus direct next-action controls where available.
 - Founder shell refined from the supplied Loom walkthrough reference: dark product sidebar, light operating workspace, primary registration CTA, topbar help/billing/avatar controls, and clearer company/service/manage navigation.
+- Founder visual system tuned closer to the supplied Loom walkthrough reference with a dark charcoal sidebar, mint primary navigation accents, warm action buttons, off-white workspace background, tighter card shadows, and a neutral modern font stack while keeping CedarHQ branding original.
 - User management workspace implemented with database-backed company members, founder-safe team/accountant sandbox invites, password setup email outbox, and audit logging.
 - Demo seeding now creates a complete company/order workspace for `founder@cedarhq.local` and connects sandbox ledger, Shopify, Amazon, sales tax, registered agent, and mailroom records so the dashboard is populated immediately after login.
 - Staff tax queue implemented with evidence-backed sandbox submission, acceptance, and rejection controls.
@@ -54,6 +55,7 @@
 - Passed live mailroom workflow: founder selected business address, founder requested scan, staff processed scan, founder mailroom showed `Scanned` and a downloadable scan document.
 - Passed after dashboard action-board update: `python3 -m unittest discover -s tests`, `VM115_BUILD_MODE=docker vm115-build .`, Dokploy restart, and public HTTPS founder dashboard smoke showing `Cedar Demo Inc`, `Company operating steps`, mailroom, banking/payments, sales tax, commerce analytics, and live connected-account counts.
 - Passed after Loom-reference shell/team update: `python3 -m unittest discover -s tests` (16 tests), `VM115_BUILD_MODE=docker vm115-build .`, Dokploy restart, and public HTTPS smoke for founder login, `/app`, `/app/team`, `/app/billing`, `/app/support`, and sandbox team invite.
+- Passed after visual theme tuning: `python3 -m unittest discover -s tests` (16 tests), `VM115_BUILD_MODE=docker vm115-build .`, Dokploy restart, public HTTPS smoke for `/app`, `/app/team`, `/app/documents`, `/app/analytics`, `/app/mailroom`, `/app/billing`, and live CSS token check.
 - Blocked: visual browser verification because the `agent-browser` CLI/tool is not available in this environment.
 - Completed reference inspection: the supplied Loom founder-app walkthrough exposed metadata, transcript, captions, and preview frames; it was used only as workflow/navigation/layout reference, not copied branding or proprietary text/design.
 - Completed reference inspection: the supplied Moonpush dashboard PNG decrypted successfully and was used only as a layout/navigation-density reference.
