@@ -54,6 +54,7 @@ from cedarhq.services import (
     get_order,
     get_timeline,
     get_user_by_session,
+    invite_company_member,
     list_compliance,
     list_documents,
     list_orders_for_ops,
@@ -216,6 +217,8 @@ class CedarHandler(BaseHTTPRequestHandler):
             return self.sales_tax_page()
         if path == "/app/billing":
             return self.billing_page()
+        if path == "/app/team":
+            return self.team_page()
         if path == "/app/support":
             return self.support_page()
         if path == "/app/assistant":
@@ -280,6 +283,8 @@ class CedarHandler(BaseHTTPRequestHandler):
             return self.checkout_post()
         if path == "/app/support":
             return self.support_post()
+        if path == "/app/team/invite":
+            return self.team_invite_post()
         if path == "/api/mailroom/address":
             return self.mailroom_address_post()
         mail_action_match = re.fullmatch(r"/api/mailroom/items/([^/]+)/action", path)
@@ -508,7 +513,12 @@ class CedarHandler(BaseHTTPRequestHandler):
           <span class="topbar-kicker">CedarHQ workspace</span>
           <strong>{esc(title)}</strong>
         </div>
-        <span class="badge warning">Sandbox services</span>
+        <div class="topbar-actions">
+          <a class="topbar-link" href="/app/support">Help</a>
+          <a class="topbar-link" href="/app/billing">Billing</a>
+          <span class="badge warning">Sandbox services</span>
+          <span class="topbar-avatar" title="{esc(self.user['name'] or self.user['email'])}">{esc(user_initials(self.user['name']))}</span>
+        </div>
       </header>
       <main class="page app-page">
         {notice_html}
@@ -580,6 +590,7 @@ class CedarHandler(BaseHTTPRequestHandler):
             (latest["name_choice_1"] or latest["legal_name"]) if latest else "New company"
         )
         if is_ops:
+            primary_action = "<a class='sidebar-primary-action' href='/ops/orders'><span>+</span>Review queue</a>"
             links = f"""
               <span class="sidebar-label">Operations</span>
               {self.sidebar_link('/ops/orders', 'Formation queue', 'FQ')}
@@ -590,16 +601,18 @@ class CedarHandler(BaseHTTPRequestHandler):
             """
         else:
             formation_href = f"/app/orders/{latest['id']}" if latest else "/app/onboarding"
+            primary_action_label = "Continue registration" if latest else "Register a company"
+            primary_action = f"<a class='sidebar-primary-action' href='{esc(formation_href)}'><span>+</span>{esc(primary_action_label)}</a>"
             links = f"""
-              <span class="sidebar-label">Workspace</span>
+              <span class="sidebar-label">Company</span>
               {self.sidebar_link('/app', 'Overview', 'OV')}
-              {self.sidebar_link(formation_href, 'Formation', 'FM')}
+              {self.sidebar_link(formation_href, 'Formation timeline', 'FM')}
               {self.sidebar_link('/app/documents', 'Documents', 'DC')}
-              {self.sidebar_link('/app/compliance', 'Compliance', 'CP')}
-              <span class="sidebar-label">Products</span>
-              {self.sidebar_link('/app/registered-agent', 'Agent', 'AG')}
-              {self.sidebar_link('/app/mailroom', 'Mailroom', 'MR')}
-              {self.sidebar_link('/app/partners', 'Banking solutions', 'BN')}
+              {self.sidebar_link('/app/compliance', 'Compliance calendar', 'CP')}
+              <span class="sidebar-label">Services</span>
+              {self.sidebar_link('/app/mailroom', 'Company address', 'AD')}
+              {self.sidebar_link('/app/registered-agent', 'Registered agent', 'AG')}
+              {self.sidebar_link('/app/partners', 'Banking & payments', 'BN')}
               {self.sidebar_link('/app/assistant', 'AI assistant', 'AI')}
               {self.sidebar_link('/app/bookkeeping', 'Bookkeeping', 'BK')}
               {self.sidebar_link('/app/taxes', 'Taxes', 'TX')}
@@ -608,6 +621,7 @@ class CedarHandler(BaseHTTPRequestHandler):
               {self.sidebar_link('/app/equity', 'Equity', 'EQ')}
               {self.sidebar_link('/app/rewards', 'Rewards', 'RW')}
               <span class="sidebar-label">Manage</span>
+              {self.sidebar_link('/app/team', 'User management', 'UM')}
               {self.sidebar_link('/app/billing', 'Plans & billing', 'BL')}
               {self.sidebar_link('/app/support', 'Support', 'SP')}
             """
@@ -617,6 +631,7 @@ class CedarHandler(BaseHTTPRequestHandler):
             <img src="/static/brand-mark.svg" width="32" height="32" alt="">
             <span>CedarHQ</span>
           </a>
+          {primary_action}
           <div class="company-switcher">
             <span class="company-avatar">{esc(company_name[:1].upper())}</span>
             <span><small>{'Staff workspace' if is_ops else 'Current company'}</small><strong>{esc(company_name)}</strong></span>
@@ -1962,6 +1977,97 @@ class CedarHandler(BaseHTTPRequestHandler):
             self.redirect("/app/sales-tax?notice=Sales-tax status updated.")
         except ValueError as exc:
             self.sales_tax_page(str(exc))
+
+    def team_page(self, error: str = ""):
+        if not self.require_auth():
+            return
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        members = self.conn.execute(
+            """
+            SELECT cm.role AS member_role, cm.created_at AS joined_at, u.email, u.name, u.role, u.email_verified
+            FROM company_members cm
+            JOIN users u ON u.id = cm.user_id
+            WHERE cm.company_id = ?
+            ORDER BY
+              CASE cm.role WHEN 'founder' THEN 0 WHEN 'accountant' THEN 1 ELSE 2 END,
+              cm.created_at
+            """,
+            (company["id"],),
+        ).fetchall()
+        member_rows = "".join(
+            f"""
+            <tr>
+              <td><strong>{esc(member['name'] or 'Invited user')}</strong><small>{esc(member['email'])}</small></td>
+              <td><span class="badge {esc(member['member_role'])}">{esc(status_label(member['member_role']))}</span></td>
+              <td>{'Verified' if member['email_verified'] else 'Verification pending'}</td>
+              <td>{esc(date_label(member['joined_at']))}</td>
+            </tr>
+            """
+            for member in members
+        )
+        body = f"""
+        <section class="workspace-head">
+          <div>
+            <span class="eyebrow">User management</span>
+            <h1>Team access for {esc(company['legal_name'] or company['name_choice_1'] or 'your company')}</h1>
+            <p>Invite collaborators with least-privilege access. Staff and admin roles are managed from operations, not by founders.</p>
+          </div>
+        </section>
+        {self.message_box(error)}
+        <section class="grid two">
+          <article class="dashboard-card">
+            <div class="section-heading"><div><span class="section-kicker">INVITE</span><h2>Add a team member</h2></div><span class="badge warning">Sandbox email</span></div>
+            <form method="post" action="/app/team/invite" class="stack">
+              <input type="hidden" name="csrf_token" value="{esc(self.csrf_token())}">
+              <label>Name<input required name="name" autocomplete="name"></label>
+              <label>Email<input required type="email" name="email" autocomplete="email"></label>
+              <label>Role
+                <select name="role">
+                  <option value="team_member">Team member</option>
+                  <option value="accountant">Accountant</option>
+                </select>
+              </label>
+              <button class="button" type="submit">Send sandbox invite</button>
+            </form>
+            <p class="disclosure">Invites create a real local user and membership. The password setup email is written to the sandbox outbox.</p>
+          </article>
+          <article class="dashboard-card">
+            <div class="section-heading"><div><span class="section-kicker">PERMISSIONS</span><h2>Role boundaries</h2></div></div>
+            <div class="service-list">
+              <div class="service-row"><span class="service-indicator included"></span><span><strong>Founder</strong><small>Owns checkout, approvals, documents, and company settings.</small></span><em>Owner</em></div>
+              <div class="service-row"><span class="service-indicator included"></span><span><strong>Team member</strong><small>Can collaborate on company workflows without operations access.</small></span><em>Limited</em></div>
+              <div class="service-row"><span class="service-indicator included"></span><span><strong>Accountant</strong><small>Can support bookkeeping and tax workflows.</small></span><em>Finance</em></div>
+              <div class="service-row"><span class="service-indicator"></span><span><strong>Staff / admin</strong><small>Operations-only roles assigned outside the founder workspace.</small></span><em>Ops</em></div>
+            </div>
+          </article>
+        </section>
+        <section class="dashboard-card service-section">
+          <div class="section-heading"><div><span class="section-kicker">MEMBERS</span><h2>Current access</h2></div><span>{len(members)} user(s)</span></div>
+          <div class="table-wrap"><table><thead><tr><th>User</th><th>Company role</th><th>Email</th><th>Joined</th></tr></thead><tbody>{member_rows}</tbody></table></div>
+        </section>
+        """
+        self.send_html("User management", body)
+
+    def team_invite_post(self):
+        if not self.require_auth():
+            return
+        data = self.form_data()
+        if not self.verify_csrf(data):
+            return self.send_error_page(403, "Security token expired", "Reload and try again.")
+        company = self.current_company()
+        if not company:
+            return self.redirect("/app/onboarding")
+        role = data.get("role", "team_member")
+        if role not in {"team_member", "accountant"}:
+            return self.team_page("Founders can invite only team members or accountants.")
+        email = data.get("email", "").strip().lower()
+        name = data.get("name", "").strip()
+        if not email or "@" not in email or not name:
+            return self.team_page("Enter a valid name and email.")
+        invite_company_member(self.conn, company["id"], self.user["id"], email, name, role, config.base_url)
+        self.redirect("/app/team?notice=Sandbox invite sent.")
 
     def billing_page(self):
         if not self.require_auth():

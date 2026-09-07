@@ -149,13 +149,13 @@ th {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100vh;
-  color: #ebeef4;
+  color: var(--ink);
   background: #111317;
 }
 
 .app-stage {
   min-width: 0;
-  background: #121418;
+  background: #f5f7fb;
 }
 
 .sidebar {
@@ -176,6 +176,37 @@ th {
 
 .sidebar-brand {
   padding: 0 0.55rem;
+}
+
+.sidebar-primary-action {
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  min-height: 2.8rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 7px;
+  color: #082b26;
+  background: #1bd6b2;
+  font-weight: 900;
+}
+
+.sidebar-primary-action:hover {
+  color: #082b26;
+  text-decoration: none;
+  background: #44e0c2;
+}
+
+.sidebar-primary-action > span {
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 5px;
+  color: #fff;
+  background: #0f5147;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .company-switcher {
@@ -226,6 +257,8 @@ th {
 .sidebar-nav {
   display: grid;
   gap: 0.25rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
 }
 
 .sidebar-label {
@@ -313,8 +346,10 @@ th {
   justify-content: space-between;
   min-height: 64px;
   padding: 0.65rem 1.5rem;
-  border-bottom: 1px solid #262a31;
-  background: #15171b;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
 }
 
 .app-topbar > div {
@@ -323,10 +358,35 @@ th {
 }
 
 .topbar-kicker {
-  color: #8f96a3;
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+.topbar-link {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.topbar-avatar {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--cedar);
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 
 .app-page {
@@ -347,18 +407,18 @@ th {
 .app-shell .assistant-side,
 .app-shell .commerce-connector,
 .app-shell .account-tile {
-  color: #ebeef4;
-  border-color: #2a2e36;
-  background: #1d2026;
-  box-shadow: none;
+  color: var(--ink);
+  border-color: var(--line);
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(23, 32, 51, 0.055);
 }
 
 .app-shell input,
 .app-shell select,
 .app-shell textarea {
-  color: #f5f6fa;
-  border-color: #343943;
-  background: #14171c;
+  color: var(--ink);
+  border-color: var(--line);
+  background: #fff;
 }
 
 .app-shell th,
@@ -371,7 +431,7 @@ th {
 .app-shell .card-footer,
 .app-shell .partner-note,
 .app-shell .tax-filing-tile {
-  border-color: #2a2e36;
+  border-color: var(--line);
 }
 
 .app-shell .dashboard-welcome p,
@@ -388,11 +448,11 @@ th {
 .app-shell .tax-filing-tile small,
 .app-shell .metric-grid article > span,
 .app-shell .metric-grid article > small {
-  color: #9aa1ad;
+  color: var(--muted);
 }
 
 .app-shell a {
-  color: #ff7a55;
+  color: var(--cedar);
 }
 
 .app-shell .button {
@@ -406,13 +466,13 @@ th {
 }
 
 .app-shell .button.secondary {
-  color: #f5f6fa;
-  border-color: #343943;
-  background: #22262d;
+  color: var(--ink);
+  border-color: var(--line);
+  background: #fff;
 }
 
 .app-shell .button.secondary:hover {
-  background: #2a2f38;
+  background: #eef4f2;
 }
 
 .welcome-console {
@@ -453,9 +513,9 @@ th {
   display: grid;
   gap: 1.3rem;
   padding: 1.35rem;
-  border: 1px solid #2a2e36;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #202228;
+  background: #fff;
 }
 
 .start-choice-card h2 {
@@ -480,7 +540,7 @@ th {
   width: min(920px, 100%);
   margin: 2rem auto 0;
   padding-top: 1rem;
-  border-top: 1px solid #242830;
+  border-top: 1px solid var(--line);
 }
 
 .discovery-rail span {
@@ -493,17 +553,17 @@ th {
 
 .discovery-rail a {
   padding: 0.55rem 0.75rem;
-  border: 1px solid #2a2e36;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  color: #c7cbd2;
-  background: #191c22;
+  color: var(--ink);
+  background: #fff;
   font-weight: 800;
 }
 
 .discovery-rail a:hover {
-  color: #fff;
+  color: var(--cedar-strong);
   text-decoration: none;
-  background: #22262d;
+  background: #eef4f2;
 }
 
 .product-console {
@@ -512,9 +572,9 @@ th {
   gap: 0.9rem;
   margin-top: 1rem;
   padding: 1rem;
-  border: 1px solid #2a2e36;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #1a1d23;
+  background: #fff;
 }
 
 .product-console .section-heading {
@@ -527,9 +587,10 @@ th {
   gap: 1rem;
   margin-bottom: 1rem;
   padding: 1rem;
-  border: 1px solid #2a2e36;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #181b20;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(23, 32, 51, 0.045);
 }
 
 .workflow-card-grid {
@@ -544,9 +605,9 @@ th {
   gap: 0.8rem;
   min-height: 260px;
   padding: 1rem;
-  border: 1px solid #303540;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #20242b;
+  background: #f9fbfd;
 }
 
 .workflow-card-top {
@@ -563,7 +624,7 @@ th {
 
 .workflow-card p {
   margin: 0;
-  color: #a3a9b3;
+  color: var(--muted);
   line-height: 1.55;
 }
 
@@ -590,10 +651,10 @@ th {
   gap: 0.65rem;
   min-width: 0;
   padding: 1rem;
-  border: 1px solid #303540;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  color: #ebeef4;
-  background: #20242b;
+  color: var(--ink);
+  background: #fff;
 }
 
 .product-console a {
@@ -611,7 +672,7 @@ th {
 .address-card small,
 .mail-item small,
 .queue-row small {
-  color: #9aa1ad;
+  color: var(--muted);
 }
 
 .service-icon {
@@ -2404,7 +2465,8 @@ dd {
 
   .company-switcher,
   .sidebar-user,
-  .sidebar-label {
+  .sidebar-label,
+  .sidebar-primary-action {
     display: none;
   }
 
@@ -2492,8 +2554,21 @@ dd {
   }
 
   .app-topbar {
+    gap: 0.8rem;
+    align-items: flex-start;
+    flex-direction: column;
     min-height: 54px;
     padding: 0.55rem 0.75rem;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+    overflow-x: auto;
+  }
+
+  .topbar-link {
+    white-space: nowrap;
   }
 
   .app-page {

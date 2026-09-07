@@ -10,6 +10,7 @@ from cedarhq.services import (
     ensure_reference_data,
     get_dashboard_context,
     get_timeline,
+    invite_company_member,
     list_compliance,
     list_documents,
     ops_transition_order,
@@ -106,6 +107,45 @@ class VerticalSliceTests(unittest.TestCase):
             self.assertEqual(review["status"], "completed")
             self.assertTrue(review["evidence_id"])
             self.assertTrue(review["receipt_id"])
+
+    def test_team_invite_creates_member_outbox_and_audit(self):
+        with transaction(self.db_path) as conn:
+            ensure_reference_data(conn)
+            founder = create_user(conn, "founder@example.com", "Password123", "Founder One", verified=True)
+            save_onboarding(
+                conn,
+                founder["id"],
+                {
+                    "entity_type": "c_corp",
+                    "state_code": "DE",
+                    "name_choice_1": "Team Sample Inc",
+                    "business_purpose": "Commerce operations.",
+                    "founder_full_name": "Founder One",
+                    "founder_email": "founder@example.com",
+                    "address_line1": "1 Market Street",
+                    "city": "Wilmington",
+                    "country": "United States",
+                    "plan_slug": "complete_back_office",
+                },
+            )
+            order = create_checkout_and_order(conn, founder, "http://127.0.0.1:8088")
+            member = invite_company_member(
+                conn,
+                order["company_id"],
+                founder["id"],
+                "bookkeeper@example.com",
+                "Bookkeeper User",
+                "accountant",
+                "http://127.0.0.1:8088",
+            )
+            self.assertEqual(member["member_role"], "accountant")
+            outbox = conn.execute("SELECT * FROM outbox_emails WHERE to_email = ?", ("bookkeeper@example.com",)).fetchall()
+            self.assertEqual(len(outbox), 1)
+            audit = conn.execute(
+                "SELECT * FROM activity_logs WHERE company_id = ? AND event_type = 'team.member_invited'",
+                (order["company_id"],),
+            ).fetchone()
+            self.assertIsNotNone(audit)
 
 
 if __name__ == "__main__":

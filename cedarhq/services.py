@@ -188,6 +188,47 @@ def create_user(conn, email: str, password: str, name: str, role: str = "founder
     return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
+def invite_company_member(
+    conn,
+    company_id: str,
+    actor_user_id: str,
+    email: str,
+    name: str,
+    role: str,
+    base_url: str,
+):
+    if role not in {"team_member", "accountant"}:
+        raise ValueError("Founders can invite only team members or accountants.")
+    normalized = normalize_email(email)
+    if not normalized or "@" not in normalized or not name.strip():
+        raise ValueError("Enter a valid name and email.")
+    company = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
+    if not company:
+        raise ValueError("Company not found.")
+    user = conn.execute("SELECT * FROM users WHERE email = ?", (normalized,)).fetchone()
+    if not user:
+        user = create_user(conn, normalized, f"Invite-{random_token(18)}aA1!", name.strip(), role=role, verified=False)
+        token = create_email_token(conn, user["id"], "password_reset")
+        send_auth_email(conn, user, "password_reset", token, base_url)
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO company_members (id, company_id, user_id, role, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (new_id("mem"), company_id, user["id"], role, utcnow()),
+    )
+    audit(conn, actor_user_id, company_id, None, "team.member_invited", f"{normalized} invited as {role}.")
+    return conn.execute(
+        """
+        SELECT cm.role AS member_role, u.*
+        FROM company_members cm
+        JOIN users u ON u.id = cm.user_id
+        WHERE cm.company_id = ? AND cm.user_id = ?
+        """,
+        (company_id, user["id"]),
+    ).fetchone()
+
+
 def get_or_create_google_sandbox_user(conn):
     email = "google.founder@cedarhq.local"
     row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
